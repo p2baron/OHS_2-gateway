@@ -3,13 +3,15 @@
  *
  * STM32F437xG is single-bank: CPU cannot fetch from flash during erase/write.
  * fpFlashErase and fpFlashWriteWord are placed in .data so they run from RAM.
+ * IWDG is refreshed inside the busy-wait loops to prevent watchdog reset during
+ * the ~2-second sector erase.
  *
- * Layout: 20 fixed 1600-byte slots starting at 0x08080000.
- * Each slot: fp_slot_hdr_t (8 bytes) + compressed template data.
+ * Layout: 20 fixed 1024-byte slots starting at 0x08080000.
+ * Each slot: fp_slot_hdr_t (8 bytes) + compressed template data (up to 1016 bytes).
+ * R503 single char-buffer templates are ~512 bytes raw — 1016 bytes is ample.
  *
  * fpBuf[] mirrors the flash sector in RAM. Populate at boot with memcpy from
- * FP_FLASH_BASE. All reads go to fpBuf; writes go to both fpBuf and flash
- * (via fpFlashWriteAll, called with chSysLock held).
+ * FP_FLASH_BASE. All reads go to fpBuf; writes go via fpFlashWriteAll.
  */
 
 #ifndef OHS_FP_FLASH_H_
@@ -22,7 +24,7 @@
 
 #define FP_FLASH_BASE   0x08080000U
 #define FP_FLASH_SECT   8               // SNB field value for sector 8
-#define FP_SLOT_SIZE    1600            // bytes per slot (header + compressed data)
+#define FP_SLOT_SIZE    1024            // bytes per slot (header + compressed data)
 #define FP_MAGIC        0xFE5A          // validity marker
 
 typedef struct {
@@ -36,32 +38,33 @@ static uint8_t  fpBuf[FINGERS_SIZE * FP_SLOT_SIZE];  // 32 KB RAM mirror
 static uint16_t fpNextId = 1;                         // incremented at each enrollment
 static bool     fpBackupDirty = false;                // fpBuf has unwritten changes
 
-/* Must execute from RAM — do not call directly, use fpFlashWriteAll. */
+/* Must execute from RAM — do not call directly, use fpFlashWriteAll.
+ * IWDG is refreshed in the busy-wait to prevent watchdog reset during ~2s erase. */
 __attribute__((noinline, section(".data")))
 static void fpFlashErase(void) {
-  while (FLASH->SR & FLASH_SR_BSY);
+  while (FLASH->SR & FLASH_SR_BSY) { IWDG->KR = 0xAAAAU; }
   FLASH->CR &= ~(FLASH_CR_PSIZE_Msk | FLASH_CR_SNB_Msk);
-  FLASH->CR |= FLASH_CR_PSIZE_1                           // 32-bit parallelism
+  FLASH->CR |= FLASH_CR_PSIZE_1
              | (FP_FLASH_SECT << FLASH_CR_SNB_Pos)
              | FLASH_CR_SER;
   FLASH->CR |= FLASH_CR_STRT;
-  while (FLASH->SR & FLASH_SR_BSY);
+  while (FLASH->SR & FLASH_SR_BSY) { IWDG->KR = 0xAAAAU; }
   FLASH->CR &= ~(FLASH_CR_SER | FLASH_CR_SNB_Msk);
 }
 
 __attribute__((noinline, section(".data")))
 static void fpFlashWriteWord(uint32_t addr, uint32_t word) {
-  while (FLASH->SR & FLASH_SR_BSY);
+  while (FLASH->SR & FLASH_SR_BSY) { IWDG->KR = 0xAAAAU; }
   FLASH->CR |= FLASH_CR_PSIZE_1 | FLASH_CR_PG;
   *(volatile uint32_t *)addr = word;
-  while (FLASH->SR & FLASH_SR_BSY);
+  while (FLASH->SR & FLASH_SR_BSY) { IWDG->KR = 0xAAAAU; }
   FLASH->CR &= ~FLASH_CR_PG;
 }
 
 /*
  * Erase sector 8 and write all FINGERS_SIZE slots from buf[].
- * MUST be called with interrupts locked (chSysLock / chSysUnlock at call site).
- * Takes ~2 s due to sector erase.
+ * Caller must disable interrupts (chSysLock) — CPU can't fetch from flash
+ * during erase/write on single-bank STM32F437xG. IWDG is refreshed internally.
  */
 static void fpFlashWriteAll(const uint8_t *buf) {
   uint32_t totalBytes = (uint32_t)(FINGERS_SIZE * FP_SLOT_SIZE);

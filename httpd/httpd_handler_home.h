@@ -76,11 +76,8 @@ static void httpd_post_custom_home(char **postDataP) {
   if (postDataLen == (uint16_t)(sizeof(conf) + sizeof(fpBuf))) {
       memcpy(&conf, *postDataP, sizeof(config_t));
       memcpy(fpBuf, *postDataP + sizeof(conf), sizeof(fpBuf));
-      chSysLock();
-      fpFlashWriteAll(fpBuf);
-      chSysUnlock();
-      fpBackupDirty = false;
-      chsnprintf(httpAlert.msg, HTTP_ALERT_MSG_SIZE, "Configuration and FP backup uploaded.");
+      fpBackupDirty = true; // flush to flash on next Save
+      chsnprintf(httpAlert.msg, HTTP_ALERT_MSG_SIZE, "Configuration and FP backup uploaded. Press Save to write FP to flash.");
       httpAlert.type = ALERT_INFO;
       return;
   }
@@ -89,8 +86,14 @@ static void httpd_post_custom_home(char **postDataP) {
     repeat = getPostData(postDataP, &name[0], sizeof(name), &valueP, &valueLen);
     DBG_HTTP("Parse: %s = '%.*s' (%u)\r\n", name, valueLen, valueP, valueLen);
     switch(name[0]) {
-      case 'e': // save
+      case 'e': // save conf to backup SRAM; flush FP to flash if dirty
         writeToBkpSRAM((uint8_t*)&conf, sizeof(config_t), 0);
+        if (fpBackupDirty) {
+          chSysLock();
+          fpFlashWriteAll(fpBuf);
+          chSysUnlock();
+          fpBackupDirty = false;
+        }
       break;
       case 'D': // Load defaults
         setConfDefault();    // Load OHS default conf.

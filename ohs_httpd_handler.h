@@ -154,8 +154,6 @@ bool getPostData(char **pPostData, char *pName, uint8_t nameLen, char **pValue, 
 #include "httpd/httpd_handler_finger.h"
 #include "httpd/httpd_handler_login.h"
 
-static uint32_t configBinPos = 0;
-
 int fs_open_custom(struct fs_file *file, const char *name){
 
   for (uint8_t htmlPage = 0; htmlPage < ARRAY_SIZE(webPage); ++htmlPage) {
@@ -290,46 +288,21 @@ int fs_open_custom(struct fs_file *file, const char *name){
       }
     }
   }
-  // Other files — combined config + FP backup, served via fs_read_custom streaming
+  // Combined config.bin: conf struct followed by fpBuf, heap-allocated for fast serving
   if (strcmp(name, "/config.bin") == 0) {
-    configBinPos    = 0;
-    file->data      = NULL;
-    file->len       = sizeof(conf) + sizeof(fpBuf);
-    file->index     = 0;  // streaming: lwIP calls fs_read_custom for each chunk
-    file->flags     = FS_FILE_FLAGS_HEADER_PERSISTENT;
-    file->pextension = NULL;
+    uint32_t totalLen = (uint32_t)(sizeof(conf) + sizeof(fpBuf));
+    uint8_t *combined = mem_malloc(totalLen);
+    if (combined == NULL) return 0;
+    memcpy(combined,               &conf, sizeof(conf));
+    memcpy(combined + sizeof(conf), fpBuf, sizeof(fpBuf));
+    file->data       = (const char *)combined;
+    file->len        = (int)totalLen;
+    file->index      = file->len;
+    file->flags      = FS_FILE_FLAGS_HEADER_PERSISTENT;
+    file->pextension = combined; // freed by fs_close_custom
     return 1;
   }
   return 0;
-}
-/*
- * Stream handler for /config.bin — serves conf struct followed by fpBuf
- * without any heap allocation. Called by lwIP httpd when file->index < file->len.
- */
-int fs_read_custom(struct fs_file *file, char *buffer, int count) {
-  uint32_t totalLen = (uint32_t)(sizeof(conf) + sizeof(fpBuf));
-  if ((uint32_t)file->len != totalLen) return -1;
-
-  uint32_t confSize = (uint32_t)sizeof(conf);
-  uint32_t pos      = configBinPos;
-  uint32_t avail    = totalLen - pos;
-  int      toRead   = ((uint32_t)count < avail) ? count : (int)avail;
-  if (toRead <= 0) return 0;
-
-  int written = 0;
-  if (pos < confSize) {
-    int fromConf = (int)(confSize - pos);
-    if (fromConf > toRead) fromConf = toRead;
-    memcpy(buffer, (const uint8_t *)&conf + pos, (size_t)fromConf);
-    written += fromConf;
-  }
-  if (written < toRead) {
-    uint32_t fpOff = (pos + (uint32_t)written > confSize) ? (pos + (uint32_t)written - confSize) : 0;
-    memcpy(buffer + written, fpBuf + fpOff, (size_t)(toRead - written));
-    written = toRead;
-  }
-  configBinPos += (uint32_t)written;
-  return written;
 }
 /*
  * LWIP close custom file
