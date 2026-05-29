@@ -66,6 +66,7 @@ char logText[LOG_TEXT_LENGTH] __attribute__((section(".ram4"))); // To decode lo
 #include "ohs_peripheral.h"
 #include "ohs_functions.h"
 #include "ohs_multipart.h"
+#include "ohs_fp_flash.h"
 
 // GPRS
 #include "gprs.h"
@@ -284,12 +285,16 @@ int main(void) {
   // Read conf struct
   readFromBkpSRAM((uint8_t*)&conf, sizeof(config_t), 0);
   chprintf(console, "Size of conf: %u, group: %u\r\n", sizeof(conf), sizeof(group));
+  // Mirror FP flash sector 8 into RAM and find next sequential ID
+  memcpy(fpBuf, (const void *)FP_FLASH_BASE, sizeof(fpBuf));
+  for (uint8_t fpi = 0; fpi < FINGERS_SIZE; fpi++) {
+    fp_slot_hdr_t fpHdr;
+    memcpy(&fpHdr, &fpBuf[(uint32_t)fpi * FP_SLOT_SIZE], sizeof(fpHdr));
+    if (fpHdr.magic == FP_MAGIC && fpHdr.id >= fpNextId) fpNextId = fpHdr.id + 1;
+  }
 
-  // Check if we have 1.5.0 -> 1.5.x version update
-  if ((conf.versionMajor == 1) && (conf.versionMinor == 5)) {
-    // Set new version conf struct changes
-
-  } else if (OHS_MINOR != conf.versionMinor) {
+  // Check version — any mismatch means the conf struct layout changed, reset all
+  if (((conf.versionMajor != OHS_MAJOR) || (conf.versionMinor != OHS_MINOR))) {
     // Unknown version change, clear all
     setConfDefault();
     // Save the changes

@@ -70,6 +70,8 @@
 #define HTML_Apply                    "<input type='submit' name='A' value='Apply'/>"
 #define HTML_Enroll                   "<input type='submit' name='E' value='Enroll FP'/>"
 #define HTML_Delete                   "<input type='submit' name='D' value='Delete FP'/>"
+#define HTML_Flush                    "<input type='submit' name='F' value='Flush FP'/>"
+#define HTML_Resync                   "<input type='submit' name='Y' value='Resync FP'/>"
 #define HTML_ApplyValPass             "<input type='submit' name='A' value='Apply' onclick='return pv()'/>"
 #define HTML_Save                     "<input type='submit' name='e' value='Save'/>"
 #define HTML_Disarm                   "<input type='submit' name='D' value='Disarm'/>"
@@ -96,9 +98,10 @@
 #define HTML_form_1                   "<form action='"
 #define HTML_form_2                   "' method='post'>"
 #define HTML_br                       "<br>"
-#define HTML_Download                 "<button type='button' onclick=\"window.open('/config.bin')\">Download config</button>"
+#define HTML_Download                 "<a href='/config.bin' download='config.bin'><button type='button'>Download config</button></a>"
 #define HTML_Upload                   "<label class='cf'><input type='file' id='u' onchange='uC(this)'>Upload config</label>"
 #define HTML_js_upload                "<script>function uC(e){var f=e.files[0];if(!f)return;var r=new FileReader();r.onload=function(e){var x=new XMLHttpRequest();x.onload=function(){if(x.status==200){document.open();document.write(x.responseText);document.close();}else{alert('Error '+x.status);}};x.open('POST','/index.html',true);x.send(e.target.result);};r.readAsArrayBuffer(f);}</script>"
+
 
 // Radio buttons
 #define HTML_cbPart1a                 "<div class='rc'><input type='radio' name='"

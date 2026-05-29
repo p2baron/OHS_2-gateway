@@ -28,9 +28,41 @@ static THD_FUNCTION(SendThread, arg) {
   nodeCmdEvent_t *inMsg;
   msg_t msg;
   int8_t resp;
+  static uint8_t fpMpBuf[6 + FP_SLOT_SIZE]; // header + compressed template
 
   while (true) {
-    msg = chMBFetchTimeout(&node_cmd_mb, (msg_t*)&inMsg, TIME_INFINITE);
+    // Handle pending multipart sends before blocking on mailbox.
+    if (fpDistPending) {
+      fpDistPending = false;
+      uint16_t dLen = fpFlashRead(fpDistSlot, &fpMpBuf[6]);
+      if (dLen > 0) {
+        fpMpBuf[0]='F'; fpMpBuf[1]='C';
+        fpMpBuf[2]=fpDistSlot; fpMpBuf[3]=0;
+        memcpy(&fpMpBuf[4], (const void *)&fpDistId, 2);
+        for (uint8_t n = 0; n < NODE_SIZE; n++) {
+          if (node[n].type == 'K' && node[n].function == 'f' &&
+              node[n].address != 0 && node[n].address != fpDistFromAddr) {
+            sendDataMultipart(node[n].address, fpMpBuf, dLen + 6);
+            chThdSleepMilliseconds(200);
+          }
+        }
+      }
+    }
+    if (fpResyncPending) {
+      fpResyncPending = false;
+      for (uint8_t s = 0; s < FINGERS_SIZE; s++) {
+        fp_slot_hdr_t rsHdr;
+        memcpy(&rsHdr, &fpBuf[(uint32_t)s * FP_SLOT_SIZE], sizeof(rsHdr));
+        if (rsHdr.magic != FP_MAGIC) continue;
+        fpMpBuf[0]='F'; fpMpBuf[1]='C'; fpMpBuf[2]=s; fpMpBuf[3]=0;
+        memcpy(&fpMpBuf[4], &rsHdr.id, 2);
+        memcpy(&fpMpBuf[6], &fpBuf[(uint32_t)s * FP_SLOT_SIZE + sizeof(rsHdr)], rsHdr.size);
+        sendDataMultipart(fpSyncAddr, fpMpBuf, rsHdr.size + 6);
+        chThdSleepMilliseconds(200);
+      }
+    }
+
+    msg = chMBFetchTimeout(&node_cmd_mb, (msg_t*)&inMsg, TIME_MS2I(500));
     if (msg == MSG_OK) {
       if (inMsg->length == 0) {
         // CMD mode

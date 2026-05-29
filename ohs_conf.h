@@ -20,9 +20,9 @@
 #define STM32_UUID ((uint32_t *)UID_BASE)
 
 #define OHS_NAME         "OHS"
-#define OHS_MAJOR        1
-#define OHS_MINOR        5
-#define OHS_MOD          7
+#define OHS_MAJOR        2
+#define OHS_MINOR        0
+#define OHS_MOD          0
 
 #define BACKUP_SRAM_SIZE 0x1000 // 4kB SRAM size
 
@@ -33,6 +33,8 @@
 #define HW_ZONES         11     // # of hardware zones on gateway
 #define CONTACTS_SIZE    10     // # of contacts
 #define KEYS_SIZE        20     // # of keys
+#define FINGERS_SIZE     20     // # of fingerprint slots
+#define FINGER_NAME_LEN   8     // short name for fingerprint slot
 #define TIMER_SIZE       10     // # of timers
 #define TRIGGER_SIZE     10     // # of timers
 #define KEY_LENGTH       4      // sizeof(uint32_t) = size of hash
@@ -178,6 +180,16 @@
 #define GET_CONF_KEY_ENABLED(x)     ((x) & 0b1)
 #define SET_CONF_KEY_ENABLED(x)     x |= 1
 #define CLEAR_CONF_KEY_ENABLED(x)   x &= ~1
+
+#define GET_CONF_FINGER_ENABLED(x)   ((x) & 0b1)
+#define GET_CONF_FINGER_PANIC(x)     ((x >> 1U) & 0b1)
+#define GET_CONF_FINGER_ADMIN(x)     ((x >> 2U) & 0b1)
+#define SET_CONF_FINGER_ENABLED(x)   x |= 1
+#define SET_CONF_FINGER_PANIC(x)     x |= (1 << 1U)
+#define SET_CONF_FINGER_ADMIN(x)     x |= (1 << 2U)
+#define CLEAR_CONF_FINGER_ENABLED(x) x &= ~1
+#define CLEAR_CONF_FINGER_PANIC(x)   x &= ~(1 << 1U)
+#define CLEAR_CONF_FINGER_ADMIN(x)   x &= ~(1 << 2U)
 
 #define GET_CONF_SYSTEM_FLAG_RTC_LOW(x)      ((x) & 0b1)
 #define GET_CONF_SYSTEM_FLAG_RADIO_FREQ(x)   ((x >> 1U) & 0b1)
@@ -716,6 +728,15 @@ typedef struct {
   uint8_t  contact;
 } key_conf_t;
 
+// Finger struct
+typedef struct {
+  uint8_t hand;       // 0=not set, 1=left, 2=right
+  uint8_t fingerIdx;  // 0=not set, 1=thumb, 2=index, 3=middle, 4=ring, 5=little
+  uint8_t pad[6];     // reserved — keeps struct size identical to old name[8]+contact+setting layout
+  uint8_t contact;    // DUMMY_NO_VALUE = not set
+  uint8_t setting;    // bit0=enabled, bit1=panic, bit2=admin
+} finger_conf_t;
+
 // Configuration struct
 typedef struct {
   uint8_t  versionMajor;
@@ -735,6 +756,7 @@ typedef struct {
   group_conf_t   group[ALARM_GROUPS];
   contact_conf_t contact[CONTACTS_SIZE];
   key_conf_t     key[KEYS_SIZE];
+  finger_conf_t  finger[FINGERS_SIZE];
 
   uint32_t dummy[3];
 
@@ -1030,6 +1052,14 @@ void setConfDefault(void){
     conf.key[i].setting = 0b00000000;
     conf.key[i].value   = 0xFFFFFFFF;  // Set key value to FF
     conf.key[i].contact = DUMMY_NO_VALUE;
+  }
+
+  for(uint8_t i = 0; i < FINGERS_SIZE; i++) {
+    conf.finger[i].hand      = 0;
+    conf.finger[i].fingerIdx = 0;
+    memset(conf.finger[i].pad, 0, sizeof(conf.finger[i].pad));
+    conf.finger[i].contact   = DUMMY_NO_VALUE;
+    conf.finger[i].setting   = 0;
   }
 
   for(uint8_t i = 0; i < ARRAY_SIZE(alertType); i++) {

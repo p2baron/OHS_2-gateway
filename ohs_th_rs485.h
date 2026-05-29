@@ -121,8 +121,17 @@ static THD_FUNCTION(RS485Thread, arg) {
                 node[nodeIndex].lastOK = getTimeUnixSec(); // Update timestamp
                 //  Node is enabled
                 if (GET_NODE_ENABLED(node[nodeIndex].setting)) {
-                  node[nodeIndex].value = (float)checkKey(GET_NODE_GROUP(node[nodeIndex].setting),
-                           (rs485Msg.data[2] % 2), &rs485Msg.data[3], rs485Msg.length - 4);
+                  if (rs485Msg.data[1] == 'f') {
+                    // Fingerprint auth — location in data[9..10]
+                    uint16_t fingerId;
+                    memcpy(&fingerId, &rs485Msg.data[9], 2);
+                    node[nodeIndex].value = (float)checkFinger(
+                        GET_NODE_GROUP(node[nodeIndex].setting),
+                        (armType_t)(rs485Msg.data[2] % 2), fingerId);
+                  } else {
+                    node[nodeIndex].value = (float)checkKey(GET_NODE_GROUP(node[nodeIndex].setting),
+                             (rs485Msg.data[2] % 2), &rs485Msg.data[3], rs485Msg.length - 4);
+                  }
                   // MQTT
                   if (GET_NODE_MQTT(node[nodeIndex].setting)) {
                     pushToMqtt(typeSensor, nodeIndex, functionValue);
@@ -203,14 +212,53 @@ static THD_FUNCTION(RS485Thread, arg) {
               } while (index < rs485Msg.length);
               DBG_RS485("\r\n");
               break;
-            case MP_MARKER: { // Multipart message
+            case 'F': // Fingerprint single-packet messages from nodes
+              if (rs485Msg.data[1] == 'I') {
+                // ID table response from node after 'F'+'Q' query
+                uint16_t nodeIds[FINGERS_SIZE];
+                memcpy(nodeIds, &rs485Msg.data[2], FINGERS_SIZE * sizeof(uint16_t));
+                bool mismatch = false;
+                for (uint8_t s = 0; s < FINGERS_SIZE; s++) {
+                  uint16_t gwId = fpFlashGetId(s);
+                  if (gwId != nodeIds[s]) { mismatch = true; break; }
+                }
+                if (mismatch) {
+                  DBG_RS485("FP: ID mismatch for addr %u, scheduling resync\r\n", rs485Msg.address);
+                  fpSyncAddr      = rs485Msg.address;
+                  fpResyncPending = true;
+                  tmpLog[0]='K'; tmpLog[1]='S'; tmpLog[2]=rs485Msg.address;
+                  pushToLog(tmpLog, 3);
+                }
+              }
+              break;
+            case MP_MARKER: { // Multipart message from node
               int8_t mpResp = multipartRxProcess(&mpRx, rs485Msg.address,
                                                   rs485Msg.data, rs485Msg.length);
               if (mpResp == 1) {
-                // Message complete in mpRx.data[0..mpRx.totalLength-1]
-                DBG_RS485("MP: reassembled %u bytes, type '%c'\r\n",
-                           mpRx.totalLength, mpRx.data[0]);
-                // TODO: handle reassembled message from mpRx.data / mpRx.totalLength
+                DBG_RS485("MP: reassembled %u bytes, type '%c%c'\r\n",
+                           mpRx.receivedLength, mpRx.data[0], mpRx.data[1]);
+                if (mpRx.data[0] == 'F' && mpRx.data[1] == 'U') {
+                  // Template uploaded from enrolling node — store and distribute
+                  uint16_t slot   = mpRx.data[2];
+                  uint16_t payLen = (uint16_t)(mpRx.receivedLength - 4);
+                  uint16_t newId  = fpNextId++;
+                  if (slot < FINGERS_SIZE && payLen > 0 &&
+                      payLen <= (FP_SLOT_SIZE - (uint16_t)sizeof(fp_slot_hdr_t))) {
+                    fp_slot_hdr_t hdr = { FP_MAGIC, newId, payLen, 0 };
+                    uint32_t off = (uint32_t)slot * FP_SLOT_SIZE;
+                    memcpy(&fpBuf[off],                    &hdr,          sizeof(hdr));
+                    memcpy(&fpBuf[off + sizeof(hdr)], &mpRx.data[4], payLen);
+                    fpBackupDirty   = true;
+                    fpDistSlot      = (uint8_t)slot;
+                    fpDistId        = newId;
+                    fpDistFromAddr  = rs485Msg.address;
+                    fpDistPending   = true; // SendThread will distribute to other FP nodes
+                    tmpLog[0]='K'; tmpLog[1]='E'; tmpLog[2]=(uint8_t)slot; tmpLog[3]=rs485Msg.address;
+                    pushToLog(tmpLog, 4);
+                    DBG_RS485("FP: enrolled slot %u id %u from addr %u, distributing\r\n",
+                               slot, newId, rs485Msg.address);
+                  }
+                }
                 multipartRxReset(&mpRx);
               } else if (mpResp < 0) {
                 DBG_RS485("MP: error\r\n");

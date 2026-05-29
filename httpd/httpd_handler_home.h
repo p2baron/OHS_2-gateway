@@ -52,7 +52,7 @@ static void fs_open_custom_home(BaseSequentialStream *chp) {
   chprintf(chp, "%s%s", HTML_e_td_e_tr, HTML_e_table);
   // Buttons
   chprintf(chp, "%s%s", HTML_LoadDefault, HTML_Save);
-  // OHS add configuration download/upload
+  // OHS add configuration download/upload (config.bin includes FP templates)
   chprintf(chp, "%s%s%s", HTML_Download, HTML_Upload, HTML_js_upload);
 }
 
@@ -66,10 +66,21 @@ static void httpd_post_custom_home(char **postDataP) {
   bool repeat;
   char *valueP;
   
-  // Check if we received configuration file (binary data matches struct size)
+  // Check uploaded file size: conf only (old format) or conf+FP (new combined format)
   if (postDataLen == sizeof(conf)) {
       memcpy(&conf, *postDataP, sizeof(config_t));
       chsnprintf(httpAlert.msg, HTTP_ALERT_MSG_SIZE, "Configuration uploaded.");
+      httpAlert.type = ALERT_INFO;
+      return;
+  }
+  if (postDataLen == (uint16_t)(sizeof(conf) + sizeof(fpBuf))) {
+      memcpy(&conf, *postDataP, sizeof(config_t));
+      memcpy(fpBuf, *postDataP + sizeof(conf), sizeof(fpBuf));
+      chSysLock();
+      fpFlashWriteAll(fpBuf);
+      chSysUnlock();
+      fpBackupDirty = false;
+      chsnprintf(httpAlert.msg, HTTP_ALERT_MSG_SIZE, "Configuration and FP backup uploaded.");
       httpAlert.type = ALERT_INFO;
       return;
   }

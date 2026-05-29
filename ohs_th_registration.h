@@ -90,6 +90,11 @@ static THD_FUNCTION(RegistrationThread, arg) {
           // MQTT Home Assistant Discovery
           if (GET_NODE_MQTT_HAD(node[nodeIndex].setting))
             pushToMqttHAD(typeSensor, nodeIndex, functionHAD, 1);
+          // For fingerprint nodes: query ID table to detect sync mismatch
+          if (inMsg->type == 'K' && inMsg->function == 'f') {
+            uint8_t qMsg[2] = {'F', 'Q'};
+            pushNodeData(inMsg->address, qMsg, 2, DUMMY_NO_VALUE, 0, NODE_CMD_FLAG_NONE);
+          }
           break;
           case 'Z': // Zone
             tmpLog[0] = 'Z'; // Log data

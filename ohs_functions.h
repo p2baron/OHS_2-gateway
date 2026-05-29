@@ -532,6 +532,51 @@ uint8_t checkKey(uint8_t groupNum, armType_t armType, uint8_t *key, uint8_t leng
   return resp;
 }
 /*
+ * Authenticate a fingerprint location against conf.finger[].
+ * Mirrors checkKey() but uses per-slot metadata instead of a hash.
+ */
+uint8_t checkFinger(uint8_t groupNum, armType_t armType, uint16_t fingerId) {
+  if (fingerId >= FINGERS_SIZE) return DUMMY_NO_VALUE;
+
+  finger_conf_t *fp = &conf.finger[fingerId];
+  chprintf(console, "Check finger: %u for group: %u, type: %s\r\n",
+           fingerId, groupNum, groupState[armType + 1]);
+
+  if (!GET_CONF_FINGER_ENABLED(fp->setting) ||
+      fp->contact == DUMMY_NO_VALUE ||
+      !GET_CONF_CONTACT_ENABLED(conf.contact[fp->contact].setting)) {
+    tmpLog[0] = 'A'; tmpLog[1] = 'F'; tmpLog[2] = (uint8_t)fingerId;
+    pushToLog(tmpLog, 3);
+    return DUMMY_NO_VALUE;
+  }
+
+  if ((groupNum >= ALARM_GROUPS) || !GET_CONF_GROUP_ENABLED(conf.group[groupNum].setting)) {
+    tmpLog[0] = 'G'; tmpLog[1] = 'f'; tmpLog[2] = groupNum;
+    pushToLog(tmpLog, 3);
+    return DUMMY_NO_VALUE;
+  }
+
+  uint8_t cg     = GET_CONF_CONTACT_GROUP(conf.contact[fp->contact].setting);
+  bool    global = GET_CONF_CONTACT_IS_GLOBAL(conf.contact[fp->contact].setting);
+  if (!global && cg != groupNum) return DUMMY_NO_VALUE;
+
+  // Panic/admin flags — functional implementation deferred
+  if (GET_GROUP_ALARM(group[groupNum].setting) ||
+      GET_GROUP_ARMED(group[groupNum].setting) ||
+      group[groupNum].armDelay > 0) {
+    tmpLog[0] = 'A'; tmpLog[1] = 'D'; tmpLog[2] = (uint8_t)fingerId;
+    pushToLog(tmpLog, 3);
+    disarmGroup(groupNum, groupNum, 0);
+  } else {
+    tmpLog[0] = 'A';
+    tmpLog[1] = (armType == armAway) ? 'A' : 'H';
+    tmpLog[2] = (uint8_t)fingerId;
+    pushToLog(tmpLog, 3);
+    armGroup(groupNum, groupNum, armType, 0);
+  }
+  return (uint8_t)fingerId;
+}
+/*
  * Set timer according defined rules
  */
 void setTimer(const uint8_t timerIndex, const bool restart) {
@@ -1020,6 +1065,17 @@ static uint8_t decodeLog(char *in, char *out, bool full){
       break;
     case 'D': // Dummy alert
       chprintf(chp, "%s %s", TEXT_Alert, TEXT_test);
+      break;
+    case 'K': // Fingerprint management
+      chprintf(chp, "FP ");
+      switch(in[1]){
+        case 'E': chprintf(chp, "enrolled s%u a%u",  (uint8_t)in[2], (uint8_t)in[3]); break;
+        case 'D': chprintf(chp, "deleted s%u a%u",   (uint8_t)in[2], (uint8_t)in[3]); break;
+        case 'F': chprintf(chp, "flush a%u",          (uint8_t)in[2]); break;
+        case 'R': chprintf(chp, "resync a%u",         (uint8_t)in[2]); break;
+        case 'S': chprintf(chp, "auto-sync a%u",      (uint8_t)in[2]); break;
+        default:  chprintf(chp, "? %c",               in[1]); break;
+      }
       break;
     case 0xff:
       chprintf(chp, "%s", TEXT_Empty);

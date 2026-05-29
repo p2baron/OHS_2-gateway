@@ -75,10 +75,6 @@ static void fs_open_custom_node(BaseSequentialStream *chp) {
   chprintf(chp, "%s", getNodeTypeString(node[webNode].type));
   chprintf(chp, "%s%s%s", HTML_e_td_e_tr_tr_td, TEXT_Function, HTML_e_td_td);
   printNodeFunction(chp, node[webNode].function);
-  if ((node[webNode].type == 'K') && (node[webNode].function == 'f')) {
-    chprintf(chp, "%s%s%s", HTML_e_td_e_tr_tr_td, TEXT_Fingerprint, HTML_e_td_td);
-    printIntInput(chp, 'r', webEnroll, 2, 1, KEYS_SIZE);
-  }
   chprintf(chp, "%s%s %s%s", HTML_e_td_e_tr_tr_td, TEXT_Node, TEXT_is, HTML_e_td_td);
   printOnOffButton(chp, "0", GET_NODE_ENABLED(node[webNode].setting));
   chprintf(chp, "%s%s %s %s%s", HTML_e_td_e_tr_tr_td, TEXT_MQTT, TEXT_HA, TEXT_Discovery, HTML_e_td_td);
@@ -91,8 +87,7 @@ static void fs_open_custom_node(BaseSequentialStream *chp) {
   // Buttons
   chprintf(chp, "%s%s", HTML_Apply, HTML_Reregister);
   if ((node[webNode].type == 'K') && (node[webNode].function == 'f')) {
-    chprintf(chp, "%s", HTML_Enroll);
-    chprintf(chp, "%s", HTML_Delete);
+    chprintf(chp, "%s%s", HTML_Flush, HTML_Resync);
   }
 }
 
@@ -157,22 +152,21 @@ static void httpd_post_custom_node(char **postDataP) {
         number = strtol(valueP, NULL, 10);
         SET_NODE_GROUP(node[webNode].setting, number);
       break;
-      case 'r': // enroll number
-        webEnroll = strtol(valueP, NULL, 10);
-        break;
-      case 'E': // enroll fingerprint
+      case 'F': // wipe all fingerprint templates on node
         message[0] = 'F';
-        message[1] = 'E';
-        message[2] = (uint8_t)webEnroll;
-        pushNodeData(node[webNode].address, message, 3,
+        message[1] = 'A';
+        pushNodeData(node[webNode].address, message, 2,
                      DUMMY_NO_VALUE, 0, NODE_CMD_FLAG_NONE);
+        tmpLog[0]='K'; tmpLog[1]='F'; tmpLog[2]=node[webNode].address;
+        pushToLog(tmpLog, 3);
         break;
-      case 'D': // delete fingerprint
-        message[0] = 'F';
-        message[1] = 'D';
-        message[2] = (uint8_t) webEnroll;
-        pushNodeData(node[webNode].address, message, 3,
-                     DUMMY_NO_VALUE, 0, NODE_CMD_FLAG_NONE);
+      case 'Y': // resync all GW templates to this node
+        if ((node[webNode].type == 'K') && (node[webNode].function == 'f')) {
+          fpSyncAddr      = node[webNode].address;
+          fpResyncPending = true;
+          tmpLog[0]='K'; tmpLog[1]='R'; tmpLog[2]=node[webNode].address;
+          pushToLog(tmpLog, 3);
+        }
         break;
       case 'e': // save
         writeToBkpSRAM((uint8_t*)&conf, sizeof(config_t), 0);

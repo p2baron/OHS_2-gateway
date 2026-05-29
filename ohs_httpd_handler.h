@@ -87,18 +87,19 @@ static authorizedConn_t authorizedConn = {0, 0};
 #define PAGE_ZONE       2
 #define PAGE_GROUP      3
 #define PAGE_USER       4
-#define PAGE_KEY        5
-#define PAGE_ALERT      6
-#define PAGE_NODE       7
-#define PAGE_LOG        8
-#define PAGE_TIMER      9
-#define PAGE_TRIGGER    10
-#define PAGE_TCL        11
-#define PAGE_LOGIN      12
+#define PAGE_FINGER     5
+#define PAGE_KEY        6
+#define PAGE_ALERT      7
+#define PAGE_NODE       8
+#define PAGE_LOG        9
+#define PAGE_TIMER      10
+#define PAGE_TRIGGER    11
+#define PAGE_TCL        12
+#define PAGE_LOGIN      13
 
 typedef struct {
   char    link[14];
-  char    name[9];
+  char    name[14];
 } webPage_t;
 
 static const webPage_t webPage[] = {
@@ -108,6 +109,7 @@ static const webPage_t webPage[] = {
   {"/zone.html",    "Zones"},
   {"/group.html",   "Groups"},
   {"/user.html",    "Users"},
+  {"/finger.html",  "Fingerprints"},
   {"/key.html",     "Keys"},
   {"/alert.html",   "Alerts"},
   {"/node.html",    "Nodes"},
@@ -120,7 +122,7 @@ static const webPage_t webPage[] = {
 // HTML pages global variables to remember elements user works with last
 static uint8_t webNode = 0, webContact = 0, webKey = 0, webZone = 0,
     webGroup = 0, webTimer = 0, webScript = DUMMY_NO_VALUE, webTrigger = 0,
-    webEnroll = 1;
+    webEnroll = 1, webFinger = 0, webFingerNode = 0;
 static char scriptName[NAME_LENGTH];
 static uint16_t webLog = 0;
 /*
@@ -149,7 +151,10 @@ bool getPostData(char **pPostData, char *pName, uint8_t nameLen, char **pValue, 
 #include "httpd/httpd_handler_tcl.h"
 #include "httpd/httpd_handler_timer.h"
 #include "httpd/httpd_handler_trigger.h"
+#include "httpd/httpd_handler_finger.h"
 #include "httpd/httpd_handler_login.h"
+
+static uint32_t configBinPos = 0;
 
 int fs_open_custom(struct fs_file *file, const char *name){
 
@@ -262,6 +267,9 @@ int fs_open_custom(struct fs_file *file, const char *name){
         case PAGE_TRIGGER:
           fs_open_custom_trigger(chp);
           break;
+        case PAGE_FINGER:
+          fs_open_custom_finger(chp);
+          break;
         case PAGE_LOGIN:
           fs_open_custom_login(chp);
           break;
@@ -282,17 +290,46 @@ int fs_open_custom(struct fs_file *file, const char *name){
       }
     }
   }
-  // Other files
+  // Other files — combined config + FP backup, served via fs_read_custom streaming
   if (strcmp(name, "/config.bin") == 0) {
-    // Serve
-    file->data = (const char *)&conf;
-    file->len = sizeof(conf);
-    file->index = file->len;
-    // allow persistent connections
-    file->flags = FS_FILE_FLAGS_HEADER_PERSISTENT;
+    configBinPos    = 0;
+    file->data      = NULL;
+    file->len       = sizeof(conf) + sizeof(fpBuf);
+    file->index     = 0;  // streaming: lwIP calls fs_read_custom for each chunk
+    file->flags     = FS_FILE_FLAGS_HEADER_PERSISTENT;
+    file->pextension = NULL;
     return 1;
   }
   return 0;
+}
+/*
+ * Stream handler for /config.bin — serves conf struct followed by fpBuf
+ * without any heap allocation. Called by lwIP httpd when file->index < file->len.
+ */
+int fs_read_custom(struct fs_file *file, char *buffer, int count) {
+  uint32_t totalLen = (uint32_t)(sizeof(conf) + sizeof(fpBuf));
+  if ((uint32_t)file->len != totalLen) return -1;
+
+  uint32_t confSize = (uint32_t)sizeof(conf);
+  uint32_t pos      = configBinPos;
+  uint32_t avail    = totalLen - pos;
+  int      toRead   = ((uint32_t)count < avail) ? count : (int)avail;
+  if (toRead <= 0) return 0;
+
+  int written = 0;
+  if (pos < confSize) {
+    int fromConf = (int)(confSize - pos);
+    if (fromConf > toRead) fromConf = toRead;
+    memcpy(buffer, (const uint8_t *)&conf + pos, (size_t)fromConf);
+    written += fromConf;
+  }
+  if (written < toRead) {
+    uint32_t fpOff = (pos + (uint32_t)written > confSize) ? (pos + (uint32_t)written - confSize) : 0;
+    memcpy(buffer + written, fpBuf + fpOff, (size_t)(toRead - written));
+    written = toRead;
+  }
+  configBinPos += (uint32_t)written;
+  return written;
 }
 /*
  * LWIP close custom file
@@ -490,6 +527,9 @@ void httpd_post_finished(void *connection, char *response_uri, u16_t response_ur
             break;
           case PAGE_TRIGGER:
             httpd_post_custom_trigger(&postDataP);
+            break;
+          case PAGE_FINGER:
+            httpd_post_custom_finger(&postDataP);
             break;
           case PAGE_LOGIN:
             httpd_post_custom_login(&postDataP, connection);
