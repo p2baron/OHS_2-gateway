@@ -288,18 +288,12 @@ int fs_open_custom(struct fs_file *file, const char *name){
       }
     }
   }
-  // Combined config.bin: conf struct followed by fpBuf, heap-allocated for fast serving
+  // config.bin: conf struct only (FP templates are in flash sector 8, persistent)
   if (strcmp(name, "/config.bin") == 0) {
-    uint32_t totalLen = (uint32_t)(sizeof(conf) + sizeof(fpBuf));
-    uint8_t *combined = mem_malloc(totalLen);
-    if (combined == NULL) return 0;
-    memcpy(combined,               &conf, sizeof(conf));
-    memcpy(combined + sizeof(conf), fpBuf, sizeof(fpBuf));
-    file->data       = (const char *)combined;
-    file->len        = (int)totalLen;
-    file->index      = file->len;
-    file->flags      = FS_FILE_FLAGS_HEADER_PERSISTENT;
-    file->pextension = combined; // freed by fs_close_custom
+    file->data  = (const char *)&conf;
+    file->len   = sizeof(conf);
+    file->index = file->len;
+    file->flags = FS_FILE_FLAGS_HEADER_PERSISTENT;
     return 1;
   }
   return 0;

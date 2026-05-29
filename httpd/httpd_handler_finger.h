@@ -190,8 +190,14 @@ static void httpd_post_custom_finger(char **postDataP) {
         tmpLog[0]='K'; tmpLog[1]='D'; tmpLog[2]=(uint8_t)webFinger; tmpLog[3]=node[webFingerNode].address;
         pushToLog(tmpLog, 4);
         break;
-      case 'e': // save to backup SRAM
+      case 'e': // save conf to backup SRAM + flush FP templates to flash if dirty
         writeToBkpSRAM((uint8_t*)&conf, sizeof(config_t), 0);
+        if (fpBackupDirty) {
+          chSysLock();
+          fpFlashWriteAll(fpBuf);
+          chSysUnlock();
+          fpBackupDirty = false;
+        }
         break;
     }
   } while (repeat);

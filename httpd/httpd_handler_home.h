@@ -66,18 +66,10 @@ static void httpd_post_custom_home(char **postDataP) {
   bool repeat;
   char *valueP;
   
-  // Check uploaded file size: conf only (old format) or conf+FP (new combined format)
+  // Check if we received a configuration file (binary data matches conf struct size)
   if (postDataLen == sizeof(conf)) {
       memcpy(&conf, *postDataP, sizeof(config_t));
       chsnprintf(httpAlert.msg, HTTP_ALERT_MSG_SIZE, "Configuration uploaded.");
-      httpAlert.type = ALERT_INFO;
-      return;
-  }
-  if (postDataLen == (uint16_t)(sizeof(conf) + sizeof(fpBuf))) {
-      memcpy(&conf, *postDataP, sizeof(config_t));
-      memcpy(fpBuf, *postDataP + sizeof(conf), sizeof(fpBuf));
-      fpBackupDirty = true; // flush to flash on next Save
-      chsnprintf(httpAlert.msg, HTTP_ALERT_MSG_SIZE, "Configuration and FP backup uploaded. Press Save to write FP to flash.");
       httpAlert.type = ALERT_INFO;
       return;
   }
