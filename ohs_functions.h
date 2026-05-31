@@ -582,12 +582,12 @@ uint8_t checkFinger(uint8_t groupNum, armType_t armType, uint16_t fingerId) {
   if (GET_GROUP_ALARM(group[groupNum].setting) ||
       GET_GROUP_ARMED(group[groupNum].setting) ||
       group[groupNum].armDelay > 0) {
-    tmpLog[0] = 'A'; tmpLog[1] = 'D'; tmpLog[2] = (uint8_t)fingerId;
+    tmpLog[0] = 'K'; tmpLog[1] = 'd'; tmpLog[2] = (uint8_t)fingerId; // FP disarmed
     pushToLog(tmpLog, 3);
     disarmGroup(groupNum, groupNum, 0);
   } else {
-    tmpLog[0] = 'A';
-    tmpLog[1] = (armType == armAway) ? 'A' : 'H';
+    tmpLog[0] = 'K';
+    tmpLog[1] = (armType == armAway) ? 'a' : 'h'; // FP armed away / home
     tmpLog[2] = (uint8_t)fingerId;
     pushToLog(tmpLog, 3);
     armGroup(groupNum, groupNum, armType, 0);
@@ -1084,17 +1084,27 @@ static uint8_t decodeLog(char *in, char *out, bool full){
     case 'D': // Dummy alert
       chprintf(chp, "%s %s", TEXT_Alert, TEXT_test);
       break;
-    case 'K': // Fingerprint management
-      chprintf(chp, "FP ");
+    case 'K': { // Fingerprint events
+      uint8_t slot = (uint8_t)in[2];
+      // Build finger label from conf.finger[slot]
+      static const char * const hStr[] = {"?","L","R"};
+      static const char * const fStr[] = {"?","Thumb","Idx","Mid","Ring","Little"};
+      uint8_t hand = (slot < FINGERS_SIZE) ? conf.finger[slot].hand    : 0;
+      uint8_t fidx = (slot < FINGERS_SIZE) ? conf.finger[slot].fingerIdx : 0;
+      const char *hl = (hand < 3) ? hStr[hand] : "?";
+      const char *fl = (fidx < 6) ? fStr[fidx] : "?";
       switch(in[1]){
-        case 'E': chprintf(chp, "enrolled s%u a%u",  (uint8_t)in[2], (uint8_t)in[3]); break;
-        case 'D': chprintf(chp, "deleted s%u a%u",   (uint8_t)in[2], (uint8_t)in[3]); break;
-        case 'F': chprintf(chp, "flush a%u",          (uint8_t)in[2]); break;
-        case 'R': chprintf(chp, "resync a%u",         (uint8_t)in[2]); break;
-        case 'S': chprintf(chp, "auto-sync a%u",      (uint8_t)in[2]); break;
-        default:  chprintf(chp, "? %c",               in[1]); break;
+        case 'E': chprintf(chp, "FP enrolled s%u a%u",  slot, (uint8_t)in[3]); break;
+        case 'D': chprintf(chp, "FP deleted s%u a%u",   slot, (uint8_t)in[3]); break;
+        case 'F': chprintf(chp, "FP flush a%u",          slot); break;
+        case 'R': chprintf(chp, "FP resync a%u",         slot); break;
+        case 'S': chprintf(chp, "FP auto-sync a%u",      slot); break;
+        case 'a': chprintf(chp, "FP %s.%s s%u armed away", hl, fl, slot+1); break;
+        case 'h': chprintf(chp, "FP %s.%s s%u armed home", hl, fl, slot+1); break;
+        case 'd': chprintf(chp, "FP %s.%s s%u disarmed",   hl, fl, slot+1); break;
+        default:  chprintf(chp, "FP ? %c", in[1]); break;
       }
-      break;
+    } break;
     case 0xff:
       chprintf(chp, "%s", TEXT_Empty);
       break;
