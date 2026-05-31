@@ -327,6 +327,15 @@ void armGroup(uint8_t groupNum, uint8_t master, armType_t armType, uint8_t hop) 
             if ((GET_CONF_ZONE_NEEDED(conf.zone[j])) && (zone[j].lastEvent != 'O')) {
               // Zone not OK, cannot arm
               sendCmdToGrp(groupNum, NODE_CMD_ARM_REJECTED, 'K'); // Send arm rejected to all Key nodes
+              // Send zone name to fingerprint nodes for display
+              { uint8_t zMsg[18]; zMsg[0]='D'; zMsg[1]='Z';
+                strncpy((char*)&zMsg[2], conf.zoneName[j], 15); zMsg[17]='\0';
+                for (uint8_t ni = 0; ni < NODE_SIZE; ni++) {
+                  if (node[ni].address && node[ni].type=='K' && node[ni].function=='f' &&
+                      GET_NODE_GROUP(node[ni].setting)==groupNum)
+                    pushNodeData(node[ni].address, zMsg, 18, DUMMY_NO_VALUE, 0, NODE_CMD_FLAG_NONE);
+                }
+              }
               tmpLog[0] = 'A'; tmpLog[1] = 'R'; tmpLog[2] = groupNum; tmpLog[3] = j; pushToLog(tmpLog, 4); // Key, Zone
               return; // exit function here
             }
@@ -341,6 +350,15 @@ void armGroup(uint8_t groupNum, uint8_t master, armType_t armType, uint8_t hop) 
         group[groupNum].armDelay = 8; // Just 2 seconds to indicate arm home
       }
       sendCmdToGrp(groupNum, NODE_CMD_ARMING, 'K'); // Send arm cmd to all Key nodes
+      // Send exit delay seconds to fingerprint nodes for display
+      { uint8_t exitSecs = (uint8_t)((uint16_t)conf.armDelay * 250U / 1000U);
+        uint8_t dMsg[3] = {'D', 'E', exitSecs};
+        for (uint8_t ni = 0; ni < NODE_SIZE; ni++) {
+          if (node[ni].address && node[ni].type=='K' && node[ni].function=='f' &&
+              GET_NODE_GROUP(node[ni].setting)==groupNum)
+            pushNodeData(node[ni].address, dMsg, 3, DUMMY_NO_VALUE, 0, NODE_CMD_FLAG_NONE);
+        }
+      }
       // MQTT
       if (GET_CONF_GROUP_MQTT(conf.group[groupNum].setting)) pushToMqtt(typeGroup, groupNum, functionState);
       // Save group state, here we save armDelay and armType

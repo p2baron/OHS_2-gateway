@@ -60,6 +60,15 @@ static THD_FUNCTION(AEThread, arg) {
         while ((wait > 0) && !(GET_GROUP_ALARM(group[groupNum].setting)) &&
                (GET_GROUP_WAIT_AUTH(group[groupNum].setting))) {
           sendCmdToGrp(groupNum, NODE_CMD_ALARM + wait, 'K');
+          // Send per-period countdown seconds to fingerprint nodes
+          { uint8_t authSecs = (uint8_t)((uint16_t)conf.armDelay * 250U / 1000U);
+            uint8_t dMsg[3] = {'D', 'I', authSecs};
+            for (uint8_t ni = 0; ni < NODE_SIZE; ni++) {
+              if (node[ni].address && node[ni].type=='K' && node[ni].function=='f' &&
+                  GET_NODE_GROUP(node[ni].setting)==groupNum)
+                pushNodeData(node[ni].address, dMsg, 3, DUMMY_NO_VALUE, 0, NODE_CMD_FLAG_NONE);
+            }
+          }
           count = 0;
           // Authentication On && time of one alarm period && NOT group has alarm already
           // (count < 8 * (conf.armDelay/4)) -> (count < (uint16_t)(2*conf.armDelay)
