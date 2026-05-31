@@ -326,8 +326,7 @@ void armGroup(uint8_t groupNum, uint8_t master, armType_t armType, uint8_t hop) 
           if (GET_CONF_ZONE_ENABLED(conf.zone[j])) {
             if ((GET_CONF_ZONE_NEEDED(conf.zone[j])) && (zone[j].lastEvent != 'O')) {
               // Zone not OK, cannot arm
-              sendCmdToGrp(groupNum, NODE_CMD_ARM_REJECTED, 'K'); // Send arm rejected to all Key nodes
-              // Send zone name to fingerprint nodes for display
+              // Send zone name FIRST so node has it before ARM_REJECTED arrives
               { uint8_t zMsg[18]; zMsg[0]='D'; zMsg[1]='Z';
                 strncpy((char*)&zMsg[2], conf.zoneName[j], 15); zMsg[17]='\0';
                 for (uint8_t ni = 0; ni < NODE_SIZE; ni++) {
@@ -336,6 +335,7 @@ void armGroup(uint8_t groupNum, uint8_t master, armType_t armType, uint8_t hop) 
                     pushNodeData(node[ni].address, zMsg, 18, DUMMY_NO_VALUE, 0, NODE_CMD_FLAG_NONE);
                 }
               }
+              sendCmdToGrp(groupNum, NODE_CMD_ARM_REJECTED, 'K'); // Send arm rejected after zone name
               tmpLog[0] = 'A'; tmpLog[1] = 'R'; tmpLog[2] = groupNum; tmpLog[3] = j; pushToLog(tmpLog, 4); // Key, Zone
               return; // exit function here
             }
