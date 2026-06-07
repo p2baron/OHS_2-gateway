@@ -1007,6 +1007,11 @@ static uint8_t decodeLog(char *in, char *out, bool full){
       groupNum = GET_CONF_ZONE_GROUP((uint8_t)in[2]);
     break;
     case 'A': // Authentication
+      if (in[1] == 'R') {
+        // Arm rejected — carries (groupNum, zone), not a key index; no "Key #N, linked to..." prefix
+        chprintf(chp, "%s %s %s %s %u. %s", TEXT_arm, TEXT_rejected, TEXT_for, TEXT_zone, (uint8_t)in[3] + 1, conf.zoneName[(uint8_t)in[3]]);
+        break;
+      }
       chprintf(chp, "%s ", TEXT_Key);
       if (full) {
         if (in[1] != 'U') {
@@ -1020,7 +1025,6 @@ static uint8_t decodeLog(char *in, char *out, bool full){
         case 'D': chprintf(chp, ", %s", TEXT_disarmed); break;
         case 'A': chprintf(chp, ", %s %s", TEXT_armed, TEXT_away); break;
         case 'H': chprintf(chp, ", %s %s", TEXT_armed, TEXT_home); break;
-        case 'R': chprintf(chp, ", %s %s %s %s %u. %s", TEXT_arm, TEXT_rejected, TEXT_for, TEXT_zone, (uint8_t)in[3] + 1, conf.zoneName[(uint8_t)in[3]]); break;
         case 'U': chprintf(chp, " %s %s ", TEXT_is, TEXT_unknown);
           if (full) {
             printKey(chp, (uint8_t *)&in[2]);
@@ -1099,9 +1103,16 @@ static uint8_t decodeLog(char *in, char *out, bool full){
         case 'F': chprintf(chp, "FP flush a%u",          slot); break;
         case 'R': chprintf(chp, "FP resync a%u",         slot); break;
         case 'S': chprintf(chp, "FP auto-sync a%u",      slot); break;
-        case 'a': chprintf(chp, "FP %s.%s s%u armed away", hl, fl, slot+1); break;
-        case 'h': chprintf(chp, "FP %s.%s s%u armed home", hl, fl, slot+1); break;
-        case 'd': chprintf(chp, "FP %s.%s s%u disarmed",   hl, fl, slot+1); break;
+        case 'a': case 'h': case 'd': {
+          chprintf(chp, "FP %s.%s s%u, %s ", hl, fl, slot+1, TEXT_linked_to);
+          if (slot < FINGERS_SIZE && conf.finger[slot].contact != DUMMY_NO_VALUE)
+            chprintf(chp, "%s", conf.contact[conf.finger[slot].contact].name);
+          else
+            chprintf(chp, "%s", NOT_SET);
+          if (in[1] == 'a')      chprintf(chp, ", %s %s", TEXT_armed, TEXT_away);
+          else if (in[1] == 'h') chprintf(chp, ", %s %s", TEXT_armed, TEXT_home);
+          else                   chprintf(chp, ", %s", TEXT_disarmed);
+        } break;
         default:  chprintf(chp, "FP ? %c", in[1]); break;
       }
     } break;

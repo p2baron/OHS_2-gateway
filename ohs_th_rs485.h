@@ -121,7 +121,9 @@ static THD_FUNCTION(RS485Thread, arg) {
                 node[nodeIndex].lastOK = getTimeUnixSec(); // Update timestamp
                 //  Node is enabled
                 if (GET_NODE_ENABLED(node[nodeIndex].setting)) {
-                  if (rs485Msg.data[1] == 'f') {
+                  if (rs485Msg.data[1] == 'f' && memcmp(&rs485Msg.data[3], "finger", 6) == 0) {
+                    // Genuine fingerprint auth — tagged "finger" so NFC cards/keys that
+                    // happen to share the 'f' function byte aren't misrouted here
                     // Fingerprint auth — location in data[9..10]
                     uint16_t fingerId;
                     memcpy(&fingerId, &rs485Msg.data[9], 2);
