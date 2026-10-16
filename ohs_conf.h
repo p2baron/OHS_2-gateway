@@ -22,7 +22,7 @@
 #define OHS_NAME         "OHS"
 #define OHS_MAJOR        2
 #define OHS_MINOR        0
-#define OHS_MOD          0
+#define OHS_MOD          1
 
 #define BACKUP_SRAM_SIZE 0x1000 // 4kB SRAM size
 
@@ -522,8 +522,8 @@ const char alertDef[][3] = {
   "GS", "GD", "GA",
   "ZP", "ZT", "ZO",
   "AA", "AH", "AD", "AU", "AF",
-  "KP",
-  "D"
+  "D",
+  "KP"
 };
 // Check alertDef size
 typedef char check_alertDef[ARRAY_SIZE(alertDef) <= 32 ? 1 : -1];
