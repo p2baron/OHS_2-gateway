@@ -292,6 +292,8 @@ int main(void) {
     memcpy(&fpHdr, &fpBuf[(uint32_t)fpi * FP_SLOT_SIZE], sizeof(fpHdr));
     if (fpHdr.magic == FP_MAGIC && fpHdr.id >= fpNextId) fpNextId = fpHdr.id + 1;
   }
+  // Sensor status unknown until each node's own R503 reports in (see 'F'+'N')
+  for (uint8_t ni = 0; ni < NODE_SIZE; ni++) fpSensorCount[ni] = FP_SENSOR_COUNT_UNKNOWN;
 
   // Check version — any mismatch means the conf struct layout changed, reset all
   if (((conf.versionMajor != OHS_MAJOR) || (conf.versionMinor != OHS_MINOR))) {

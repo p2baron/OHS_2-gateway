@@ -231,6 +231,16 @@ static THD_FUNCTION(RS485Thread, arg) {
                   tmpLog[0]='K'; tmpLog[1]='S'; tmpLog[2]=rs485Msg.address;
                   pushToLog(tmpLog, 3);
                 }
+              } else if (rs485Msg.data[1] == 'N') {
+                // Sensor template count, pushed unsolicited by the node after
+                // boot or any local sync event — see sendTemplateCountToGateway()
+                // on the node side.
+                uint16_t count;
+                memcpy(&count, &rs485Msg.data[2], 2);
+                if (rs485Msg.address < NODE_SIZE) {
+                  fpSensorCount[rs485Msg.address] = count;
+                }
+                DBG_RS485("FP: addr %u reports %u templates on sensor\r\n", rs485Msg.address, count);
               }
               break;
             case MP_MARKER: { // Multipart message from node
@@ -258,6 +268,26 @@ static THD_FUNCTION(RS485Thread, arg) {
                     tmpLog[0]='K'; tmpLog[1]='E'; tmpLog[2]=(uint8_t)slot; tmpLog[3]=rs485Msg.address;
                     pushToLog(tmpLog, 4);
                     DBG_RS485("FP: enrolled slot %u id %u from addr %u, distributing\r\n",
+                               slot, newId, rs485Msg.address);
+                  }
+                } else if (mpRx.data[0] == 'F' && mpRx.data[1] == 'G') {
+                  // Template pulled from a sensor on request (Fingerprints page
+                  // "Pull FP" button) — store, but do NOT auto-distribute: this
+                  // is a backup/restore of the gateway's own record from
+                  // physical hardware, not a new enrollment to propagate.
+                  uint16_t slot   = mpRx.data[2];
+                  uint16_t payLen = (uint16_t)(mpRx.receivedLength - 4);
+                  uint16_t newId  = fpNextId++;
+                  if (slot < FINGERS_SIZE && payLen > 0 &&
+                      payLen <= (FP_SLOT_SIZE - (uint16_t)sizeof(fp_slot_hdr_t))) {
+                    fp_slot_hdr_t hdr = { FP_MAGIC, newId, payLen, 0 };
+                    uint32_t off = (uint32_t)slot * FP_SLOT_SIZE;
+                    memcpy(&fpBuf[off],                    &hdr,          sizeof(hdr));
+                    memcpy(&fpBuf[off + sizeof(hdr)], &mpRx.data[4], payLen);
+                    fpBackupDirty   = true;
+                    tmpLog[0]='K'; tmpLog[1]='L'; tmpLog[2]=(uint8_t)slot; tmpLog[3]=rs485Msg.address;
+                    pushToLog(tmpLog, 4);
+                    DBG_RS485("FP: pulled slot %u id %u from addr %u\r\n",
                                slot, newId, rs485Msg.address);
                   }
                 }

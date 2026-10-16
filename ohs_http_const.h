@@ -70,6 +70,7 @@
 #define HTML_Apply                    "<input type='submit' name='A' value='Apply'/>"
 #define HTML_Enroll                   "<input type='submit' name='E' value='Enroll FP'/>"
 #define HTML_Delete                   "<input type='submit' name='D' value='Delete FP'/>"
+#define HTML_PullFP                   "<input type='submit' name='G' value='Pull FP'/>"
 #define HTML_Flush                    "<input type='submit' name='F' value='Flush FP'/>"
 #define HTML_Resync                   "<input type='submit' name='Y' value='Resync FP'/>"
 #define HTML_ApplyValPass             "<input type='submit' name='A' value='Apply' onclick='return pv()'/>"

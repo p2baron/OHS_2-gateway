@@ -133,4 +133,11 @@ static volatile uint8_t  fpDistSlot    = 0;
 static volatile uint16_t fpDistId      = 0;
 static volatile uint8_t  fpDistFromAddr = 0; // skip this address (the enrolling node)
 
+/* Sensor status: valid-template count last reported by each node's own R503,
+ * pushed unsolicited on 'F'+'N' — see sendTemplateCountToGateway() on the
+ * node side. Indexed by node address. Lets the Fingerprints page show live
+ * sensor status without depending on an on-demand query. */
+#define FP_SENSOR_COUNT_UNKNOWN 0xFFFF
+static volatile uint16_t fpSensorCount[NODE_SIZE];
+
 #endif /* OHS_FP_FLASH_H_ */

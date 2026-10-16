@@ -1139,6 +1139,16 @@ static uint8_t decodeLog(char *in, char *out, bool full){
               chprintf(chp, "%s", NOT_SET);
           }
           break;
+        case 'L':
+          chprintf(chp, "FP pulled");
+          if (full) {
+            chprintf(chp, " %s.%s s%u, %s ", hl, fl, slot+1, TEXT_linked_to);
+            if (slot < FINGERS_SIZE && conf.finger[slot].contact != DUMMY_NO_VALUE)
+              chprintf(chp, "%s", conf.contact[conf.finger[slot].contact].name);
+            else
+              chprintf(chp, "%s", NOT_SET);
+          }
+          break;
         default:  chprintf(chp, "FP ? %c", in[1]); break;
       }
     } break;

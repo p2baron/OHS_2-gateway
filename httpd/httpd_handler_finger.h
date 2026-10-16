@@ -120,11 +120,28 @@ static void fs_open_custom_finger(BaseSequentialStream *chp) {
       chprintf(chp, "%u. %s%s", i + 1, node[i].name, HTML_e_option);
     }
   }
-  chprintf(chp, "%s%s", HTML_e_select, HTML_e_td_e_tr);
+  chprintf(chp, "%s%s", HTML_e_select, HTML_e_td_e_tr_tr_td);
+
+  // Sensor status: whether the selected fingerprint slot is within the
+  // selected node's R503 template count, pushed unsolicited by the node
+  // after boot or any local sync event (enroll/delete/flush/peer sync —
+  // see 'F'+'N' in ohs_th_rs485.h). The sensor only reports a total count,
+  // not which specific slots are occupied, so this assumes slots fill
+  // sequentially from 0 — not exact if a non-last slot was deleted, but
+  // good enough as a live sanity check. Not the gateway's own "Stored"
+  // column above, which reflects fpBuf instead.
+  chprintf(chp, "%s%s", TEXT_Sensor, HTML_e_td_td);
+  if (node[webFingerNode].address < NODE_SIZE &&
+      fpSensorCount[node[webFingerNode].address] != FP_SENSOR_COUNT_UNKNOWN) {
+    printOkNok(chp, webFinger < fpSensorCount[node[webFingerNode].address]);
+  } else {
+    chprintf(chp, "%s", TEXT_unknown);
+  }
+  chprintf(chp, "%s", HTML_e_td_e_tr);
   chprintf(chp, "%s", HTML_e_table);
 
   // Buttons
-  chprintf(chp, "%s%s%s%s", HTML_Apply, HTML_Save, HTML_Enroll, HTML_Delete);
+  chprintf(chp, "%s%s%s%s%s", HTML_Apply, HTML_Save, HTML_Enroll, HTML_PullFP, HTML_Delete);
 }
 
 /*
@@ -171,6 +188,15 @@ static void httpd_post_custom_finger(char **postDataP) {
       case 'E': // enroll — send 'F'+'E'+location to target node
         message[0] = 'F';
         message[1] = 'E';
+        message[2] = (uint8_t)webFinger;
+        pushNodeData(node[webFingerNode].address, message, 3,
+                     DUMMY_NO_VALUE, 0, NODE_CMD_FLAG_NONE);
+        break;
+      case 'G': // pull from sensor — ask node to read the slot straight off the R503
+                // and send it back; stored by the 'F'+'G' multipart handler in
+                // ohs_th_rs485.h once the reply arrives (not synchronous).
+        message[0] = 'F';
+        message[1] = 'G';
         message[2] = (uint8_t)webFinger;
         pushNodeData(node[webFingerNode].address, message, 3,
                      DUMMY_NO_VALUE, 0, NODE_CMD_FLAG_NONE);
