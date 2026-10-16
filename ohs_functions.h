@@ -350,8 +350,17 @@ void armGroup(uint8_t groupNum, uint8_t master, armType_t armType, uint8_t hop) 
         group[groupNum].armDelay = 8; // Just 2 seconds to indicate arm home
       }
       sendCmdToGrp(groupNum, NODE_CMD_ARMING, 'K'); // Send arm cmd to all Key nodes
-      // Send exit delay seconds to fingerprint nodes for display
-      { uint8_t exitSecs = (uint8_t)((uint16_t)conf.armDelay * 250U / 1000U);
+      // Send exit delay seconds to fingerprint nodes for display — only for
+      // away: home's armDelay above is a fixed 2-second formality, not a
+      // real user-facing exit delay, and this was previously sent for home
+      // too (same conf.armDelay-derived value as away, unrelated to the
+      // actual 2s), which let the node's brief ARMING/countdown screen
+      // flash before ARMED_HOME replaced it a moment later. Leaving
+      // dispCountdownMax at 0 (its normal idle-state value — see the
+      // node's NODE_CMD_ARMING handler) lets the node recognize "no real
+      // countdown was sent" and skip that screen for home-arm.
+      if (armType == armAway) {
+        uint8_t exitSecs = (uint8_t)((uint16_t)conf.armDelay * 250U / 1000U);
         uint8_t dMsg[3] = {'D', 'E', exitSecs};
         for (uint8_t ni = 0; ni < NODE_SIZE; ni++) {
           if (node[ni].address && node[ni].type=='K' && node[ni].function=='f' &&
