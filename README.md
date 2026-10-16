@@ -1,7 +1,9 @@
 ## Open Home Security GW (fingerprint fork)
 
 Gateway code for the OHS board v 2.0.x custom board with STM32F4x7.
-Using ChibiOS/RT port for ARM-Cortex-M4.
+Builds against [vysocan/ChibiOS_21.11.x](https://github.com/vysocan/ChibiOS_21.11.x) —
+a ChibiOS/RT 21.11.x tree with the OHS board files already added, not vanilla
+ChibiOS-RT.
 
 This is a fork of [vysocan/OHS_2-gateway](https://github.com/vysocan/OHS_2-gateway)
 (see https://openhomesecurity.blogspot.com/ for the original project), extended
