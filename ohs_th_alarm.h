@@ -89,6 +89,17 @@ static THD_FUNCTION(AEThread, arg) {
         //   wait = 0   NOT group has alarm already
         if ((!wait) && !(GET_GROUP_ALARM(group[groupNum].setting))) {
           SET_GROUP_ALARM(group[groupNum].setting); // Set alarm bit On
+          // Send zone name FIRST so fingerprint nodes have it before the
+          // ALARM command arrives — same pattern as armGroup()'s arm-
+          // rejected case, reusing the same 'D'+'Z' message/handler.
+          { uint8_t zMsg[18]; zMsg[0]='D'; zMsg[1]='Z';
+            strncpy((char*)&zMsg[2], conf.zoneName[inMsg->zone], 15); zMsg[17]='\0';
+            for (uint8_t ni = 0; ni < NODE_SIZE; ni++) {
+              if (node[ni].address && node[ni].type=='K' && node[ni].function=='f' &&
+                  GET_NODE_GROUP(node[ni].setting)==groupNum)
+                pushNodeData(node[ni].address, zMsg, 18, DUMMY_NO_VALUE, 0, NODE_CMD_FLAG_NONE);
+            }
+          }
           sendCmdToGrp(groupNum, NODE_CMD_ALARM, 'K');
           // Combine alarms, so that next alarm will not disable ongoing one
           if (inMsg->type == 'P') {
