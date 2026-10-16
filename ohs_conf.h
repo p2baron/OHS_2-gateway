@@ -522,6 +522,7 @@ const char alertDef[][3] = {
   "GS", "GD", "GA",
   "ZP", "ZT", "ZO",
   "AA", "AH", "AD", "AU", "AF",
+  "KP",
   "D"
 };
 // Check alertDef size

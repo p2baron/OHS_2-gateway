@@ -587,7 +587,7 @@ uint8_t checkFinger(uint8_t groupNum, armType_t armType, uint16_t fingerId) {
   bool    global = GET_CONF_CONTACT_IS_GLOBAL(conf.contact[fp->contact].setting);
   if (!global && cg != groupNum) return DUMMY_NO_VALUE;
 
-  // Panic/admin flags — functional implementation deferred
+  // Admin flag — functional implementation deferred
   if (GET_GROUP_ALARM(group[groupNum].setting) ||
       GET_GROUP_ARMED(group[groupNum].setting) ||
       group[groupNum].armDelay > 0) {
@@ -600,6 +600,13 @@ uint8_t checkFinger(uint8_t groupNum, armType_t armType, uint16_t fingerId) {
     tmpLog[2] = (uint8_t)fingerId;
     pushToLog(tmpLog, 3);
     armGroup(groupNum, groupNum, armType, 0);
+  }
+  // Panic finger: arm/disarm above already happened unchanged — this only
+  // adds a second, separately-alertable log entry so a panic scan can
+  // trigger SMS/Page/Email/MQTT per the Alerts page "KP" row.
+  if (GET_CONF_FINGER_PANIC(fp->setting)) {
+    tmpLog[0] = 'K'; tmpLog[1] = 'P'; tmpLog[2] = (uint8_t)fingerId;
+    pushToLog(tmpLog, 3);
   }
   return (uint8_t)fingerId;
 }
@@ -1122,6 +1129,16 @@ static uint8_t decodeLog(char *in, char *out, bool full){
           else if (in[1] == 'h') chprintf(chp, ", %s %s", TEXT_armed, TEXT_home);
           else                   chprintf(chp, ", %s", TEXT_disarmed);
         } break;
+        case 'P':
+          chprintf(chp, "FP %s", TEXT_Panic);
+          if (full) {
+            chprintf(chp, " %s.%s s%u, %s ", hl, fl, slot+1, TEXT_linked_to);
+            if (slot < FINGERS_SIZE && conf.finger[slot].contact != DUMMY_NO_VALUE)
+              chprintf(chp, "%s", conf.contact[conf.finger[slot].contact].name);
+            else
+              chprintf(chp, "%s", NOT_SET);
+          }
+          break;
         default:  chprintf(chp, "FP ? %c", in[1]); break;
       }
     } break;
