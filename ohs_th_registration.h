@@ -61,7 +61,8 @@ static THD_FUNCTION(RegistrationThread, arg) {
                       pushNodeCmd(inMsg->address, NODE_CMD_AUTH_1);
                     } else {
                       if (GET_GROUP_ARMED(group[groupNum].setting)) {
-                        pushNodeCmd(inMsg->address, NODE_CMD_ARMED_AWAY);
+                        pushNodeCmd(inMsg->address, GET_GROUP_ARMED_HOME(group[groupNum].setting) ?
+                            NODE_CMD_ARMED_HOME : NODE_CMD_ARMED_AWAY);
                       } else {
                         if (group[groupNum].armDelay > 0) {
                           pushNodeCmd(inMsg->address, NODE_CMD_ARMING);
