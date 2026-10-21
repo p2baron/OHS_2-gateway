@@ -1120,8 +1120,13 @@ static uint8_t decodeLog(char *in, char *out, bool full){
       const char *hl = (hand < 3) ? hStr[hand] : "?";
       const char *fl = (fidx < 6) ? fStr[fidx] : "?";
       switch(in[1]){
-        case 'E': chprintf(chp, "FP enrolled s%u a%u",  slot, (uint8_t)in[3]); break;
-        case 'D': chprintf(chp, "FP deleted s%u a%u",   slot, (uint8_t)in[3]); break;
+        // +1 here to match the Fingerprints page's 1-indexed slot numbers
+        // (its <select> submits a 0-indexed value but labels options
+        // "1.".."20." — see httpd_handler_finger.h) and the 'a'/'h'/'d'
+        // case below, which already did this; 'E'/'D' didn't, so the log
+        // showed a different slot number than the page for the same event.
+        case 'E': chprintf(chp, "FP enrolled s%u a%u",  slot+1, (uint8_t)in[3]); break;
+        case 'D': chprintf(chp, "FP deleted s%u a%u",   slot+1, (uint8_t)in[3]); break;
         case 'F': chprintf(chp, "FP flush a%u",          slot); break;
         case 'R': chprintf(chp, "FP resync a%u",         slot); break;
         case 'S': chprintf(chp, "FP auto-sync a%u",      slot); break;
