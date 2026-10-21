@@ -329,10 +329,31 @@ static void handleMqttPubSensor(mqttPubEvent_t *inMsg, char *topic,
       strncat (topic, TEXT_value,
           LWIP_MIN (strlen (TEXT_value), (topicSize - strlen (topic) - 1)));
 
-      // Key sensors: output contact name; others: float value
-      if (node[inMsg->number].type == 'K') {
+      // Key sensors: output contact name; others: float value.
+      // Fingerprint nodes (function=='f') store a conf.finger[] index in
+      // .value (see checkFinger()'s return value in ohs_th_rs485.h), not a
+      // conf.key[] index — KEYS_SIZE and FINGERS_SIZE are both 20, so the
+      // old unconditional conf.key[] lookup below silently "worked" (bounds
+      // check passed) for every finger slot while reading the wrong table;
+      // conf.key[].contact is itself unchecked against CONTACTS_SIZE, so for
+      // slots whose leftover/uninitialized key_idx.contact byte happened to
+      // be >= CONTACTS_SIZE, this read conf.contact[] out of bounds — a wild
+      // %s read that walked off the end of CCM RAM entirely (confirmed live
+      // via SWD: bus fault just past the 64KB ram4 region, inside chvprintf,
+      // in this exact thread).
+      if (node[inMsg->number].type == 'K' && node[inMsg->number].function == 'f') {
+        uint8_t finger_idx = (uint8_t) node[inMsg->number].value;
+        if (finger_idx < FINGERS_SIZE &&
+            conf.finger[finger_idx].contact != DUMMY_NO_VALUE &&
+            conf.finger[finger_idx].contact < CONTACTS_SIZE) {
+          chsnprintf (payload, payloadSize, "%s",
+              conf.contact[conf.finger[finger_idx].contact].name);
+        } else {
+          chsnprintf (payload, payloadSize, "%s", TEXT_unknown);
+        }
+      } else if (node[inMsg->number].type == 'K') {
         uint8_t key_idx = (uint8_t) node[inMsg->number].value;
-        if (key_idx < KEYS_SIZE) {
+        if (key_idx < KEYS_SIZE && conf.key[key_idx].contact < CONTACTS_SIZE) {
           chsnprintf (payload, payloadSize, "%s",
               conf.contact[conf.key[key_idx].contact].name);
         } else {

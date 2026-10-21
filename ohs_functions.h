@@ -576,6 +576,7 @@ uint8_t checkFinger(uint8_t groupNum, armType_t armType, uint16_t fingerId) {
 
   if (!GET_CONF_FINGER_ENABLED(fp->setting) ||
       fp->contact == DUMMY_NO_VALUE ||
+      fp->contact >= CONTACTS_SIZE ||
       !GET_CONF_CONTACT_ENABLED(conf.contact[fp->contact].setting)) {
     tmpLog[0] = 'A'; tmpLog[1] = 'F'; tmpLog[2] = (uint8_t)fingerId;
     pushToLog(tmpLog, 3);
