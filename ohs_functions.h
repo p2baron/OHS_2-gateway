@@ -43,8 +43,13 @@ time_t getTimeUnixSec(void) {
 
   rtcGetTime(&RTCD1, &timespec);
   timeSec = convertRTCDateTimeToUnixSecond(&timespec);
-  if ((timeSec >= calculateDST(timespec.year, conf.timeDstMonth, conf.timeDstWeekNum, conf.timeDstDow, conf.timeDstHour)) &&
-      (timeSec <= calculateDST(timespec.year, conf.timeStdMonth, conf.timeStdWeekNum, conf.timeStdDow, conf.timeStdHour))) {
+  // conf.timeDstMonth/timeStdMonth are 0-indexed (Jan=0..Dec=11, set straight
+  // from the Settings page's <select> index - see httpd_handler_setting.h),
+  // but calculateDST() documents/expects 1=Jan..12=Dec. Passing the raw
+  // 0-indexed value made DST actually run Feb-Sep instead of the configured
+  // Mar-Oct, so the gateway was a month early/late at both ends of DST.
+  if ((timeSec >= calculateDST(timespec.year, conf.timeDstMonth + 1, conf.timeDstWeekNum, conf.timeDstDow, conf.timeDstHour)) &&
+      (timeSec <= calculateDST(timespec.year, conf.timeStdMonth + 1, conf.timeStdWeekNum, conf.timeStdDow, conf.timeStdHour))) {
     timeSec += conf.timeDstOffset * SECONDS_PER_MINUTE;
   } else {
     timeSec += conf.timeStdOffset * SECONDS_PER_MINUTE;
